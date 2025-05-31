@@ -1,0 +1,154 @@
+# GPLab Configuration File - Carbon Pricing Experiment
+
+# --- Large Language Model (LLM) and Embedding Model Configuration ---
+llm_api_configs:
+  - base_url: "http://localhost:3000/v1/"                                         # Example: Local API endpoint
+    api_key: "sk-V395yxePMIyg6eCiNtL2mdlD1LAqA3KKAgj783ElOditm151"                                           # Replace with your actual API key
+    model: "THUDM/glm-4-9b-chat"                              # Model name for this endpoint
+    temperature: 0.7                                                              # Default temperature for this model
+    top_p: 0.9                                                                    # Default top_p for this model
+    description: "Local New-API THUDM/GLM-4-9B-0414"
+    weight: 1.0      
+  - base_url: "https://open.bigmodel.cn/api/paas/v4/"                             # ZhipuAI API 1
+    api_key: "d4f1e1147e434f84b11a8ae1aea8336d.UPs7dIks0fDXktsN"                # API key 1
+    model: "glm-4-flash"                                                            # Model name
+    temperature: 0.7                                                              # Default temperature
+    top_p: 0.9                                                                    # Default top_p
+    description: "ZhipuAI glm-4-flash API 1"
+    weight: 1.0                                                                   # Load balancing weight
+  - base_url: "https://open.bigmodel.cn/api/paas/v4/"                             # ZhipuAI API 2
+    api_key: "4616fefbc16a45519f751c39806a7a5b.9h8bfb1MZbj5QIGy"                # API key 2
+    model: "glm-4-flash"
+    temperature: 0.7
+    top_p: 0.9
+    description: "ZhipuAI glm-4-flash API 2"
+    weight: 1.0
+  - base_url: "https://open.bigmodel.cn/api/paas/v4/"                             # ZhipuAI API 3
+    api_key: "6789a4d1fbcd413aba785e5efd417832.Cq9Mx8LiPI7OChOO"                # API key 3
+    model: "glm-4-flash"
+    temperature: 0.7
+    top_p: 0.9
+    description: "ZhipuAI glm-4-flash API 3"
+    weight: 1.0
+  - base_url: "https://open.bigmodel.cn/api/paas/v4/"                             # ZhipuAI API 4
+    api_key: "58d9bb86abcb453b90089748dbdef07a.85TfxLkeQue3xNAf"                # API key 4
+    model: "glm-4-flash"
+    temperature: 0.7
+    top_p: 0.9
+    description: "ZhipuAI glm-4-flash API 4"
+    weight: 1.0
+  - base_url: "https://open.bigmodel.cn/api/paas/v4/"                             # ZhipuAI API 5
+    api_key: "c6b7dac87b2d419a846cbd1a85665513.zSlsTtAO5DQaaeOw"                # API key 5
+    model: "glm-4-flash"
+    temperature: 0.7
+    top_p: 0.9
+    description: "ZhipuAI glm-4-flash API 5"
+    weight: 1.0
+ 
+
+agent_driver_llm_index: [0]      # Array of indices for agent decisions with load balancing
+other_llm_index: [0]             # Array of indices for other tasks (e.g., sentiment eval)
+embedding_api_index: [0]                     # Index (0-based) in llm_api_configs to use for remote embeddings (if use_local_embedding is False)
+
+# QPS Control Configuration
+max_concurrent_requests: 14                 # Maximum concurrent LLM requests to prevent rate limiting
+
+use_local_embedding_model: True # Whether to use a local embedding model (True) or a remote API (False)
+local_embedding_model_path: "C://Users//Cromwell//.cache//huggingface//hub//models--sentence-transformers--all-MiniLM-L6-v2//snapshots//e4ce9877abf3edfe10b0d82785e83bdcb973e22e" # Example local path
+embedding_dimension: 384        # Dimension of the chosen embedding model
+embedding_device: "cpu"         # Device for local embeddings ('cuda', 'cpu', etc.)
+
+# --- Social Agent Configuration ---
+# Based on CGSS2018 data
+agent_data_path: "../data/all_profiles.json" # Path to the JSON file containing agent source data (NEEDS TO BE CREATED/SPECIFIED)
+agent_sample_size: 500       # Number of agents to sample for the simulation (adjust as needed)
+agent_sample_seed: 2         # Random seed for agent sampling reproducibility
+agent_sampling_method: "random" # Method for sampling agents ("random")
+
+# Agent Memory System Configuration (can keep defaults or adjust)
+memory_reflection_threshold: 5
+memory_reflection_count: 2
+memory_time_weight_lambda: 0.8
+memory_retrieval_k: 5
+
+# Agent Decision Principles
+agent_decision_principles:
+  - "According to social identity theory, individuals adjust their views to align with group norms in response to the need for belonging."
+# --- Social Subsystem Configuration ---
+active_subsystems:
+  - "EcoSystemExp2"
+  - "OpinionSystemExp2"
+
+# Configuration specific to each subsystem
+subsystem_configs:
+  EcoSystemExp2:
+    required_agent_attributes: [ # Attributes agents need for economic decisions
+      "id",
+      "Basic Information.Gender",
+      "Basic Information.Age",
+      "Basic Information.Education Level", # May influence policy understanding
+      # "Economic Attributes.Annual Household Income", # Key factor for green product affordability
+      # "Economic Attributes.Expenditure",
+      # "Psychological Attributes.Environmental Concern" # If available in CGSS data, or proxy
+    ]
+    environment_attributes: ["vehicle_prices", "government_policy", "market_information", "product_information"] # Info EcoSystem provides
+    decision_attributes: # Decisions agents make in this system
+      - name: "green_product_purchase_intention"
+        description: "<a value between 0.0 and 1.0 indicating your intention to purchase a green vehicle (new energy car) based on your financial situation, values, and the current market conditions. Higher values indicate stronger purchase intention: 0.0-0.2 (no intention), 0.21-0.4 (slight interest), 0.41-0.6 (moderate interest), 0.61-0.8 (strong interest), 0.81-1.0 (definite purchase intention)>"
+      - name: "traditional_product_purchase_intention"
+        description: "<a value between 0.0 and 1.0 indicating your intention to purchase a traditional vehicle (gasoline car). Higher values indicate stronger purchase intention: 0.0-0.2 (no intention), 0.21-0.4 (slight interest), 0.41-0.6 (moderate interest), 0.61-0.8 (strong interest), 0.81-1.0 (definite purchase intention), This is just an expression of will, and it does not mean that you want to actually buy a car>"
+    
+    # Epoch-keyed carbon pricing policies
+    # Example: increasing carbon tax or specific subsidies
+    carbon_pricing_policies:
+      "0": { "vehicle_tax_rate": 0.05, "green_vehicle_subsidy": 1000 }
+      "1": { "vehicle_tax_rate": 0.05, "green_vehicle_subsidy": 1000 }
+      "2": { "vehicle_tax_rate": 0.05, "green_vehicle_subsidy": 1000 }
+      "3": { "vehicle_tax_rate": 0.05, "green_vehicle_subsidy": 1000 }
+      "4": { "vehicle_tax_rate": 0.05, "green_vehicle_subsidy": 1000 }
+      "5": { "vehicle_tax_rate": 0.05, "green_vehicle_subsidy": 1000 }
+      "6": { "vehicle_tax_rate": 0.05, "green_vehicle_subsidy": 1000 }
+      "7": { "vehicle_tax_rate": 0.05, "green_vehicle_subsidy": 1000 }
+      # Define more for longer simulations
+
+  OpinionSystemExp2:
+    required_agent_attributes: [
+      "id",
+      "Social Attributes.Internet Usage", # Influences exposure to online discourse
+      "Basic Information.Education Level", # May influence policy understanding
+      "Psychological Attributes.Openness" # If available, for adoption of new ideas
+    ]
+    environment_attributes: ["recommended_posts", "your_current_consumer_type", "neighbor_green_consumer_ratio"]
+    decision_attributes:
+      - name: "become_consumer_type" # Consumer type decision
+        description: "<choose 'green' or 'traditional' to describe your current consumer preference type, It's just one of your positions on social media>"
+      - name: "social_actions" # Social media actions
+        description: '''[{"action": "post", "content": "<your post content string related to carbon policy, green products, or environmental concerns>"}, {"action": "like", "post_id": "<ID of post to like>"}, {"action": "repost", "post_id": "<ID of post to repost>"}]'''
+
+    num_recommendations: 8 # Increased from 5 to expose agents to more opinions
+    recommendation_algorithm: "mixed" # Now uses a mix of neighborhood and content
+    network_k_neighbors: 5 # For Watts-Strogatz small-world network. Max for N=5 agents (from agent_sample_size).
+    network_rewire_prob: 0.1 # Increased from 0.1 to make the network more random, enhancing influence spread.
+    gov_post_base_likes: 1000 # Government posts on policy get higher visibility
+    initial_green_consumer_ratio: 0.2 # Start with 20% green consumers
+    # Epoch-keyed government promotion headlines/messages
+    government_promotion_headlines:
+      # "0": "💡 GO GREEN, GO SMART! 🌿 Slash your fuel bills FOREVER! Electric vehicles mean HUGE long-term savings on gas AND maintenance. Drive into a cheaper, cleaner future! 💰🚗"
+      # "1": "⛽ Tired of Gas Price Rollercoasters? 🎢 Switch to Electric & LOCK IN SAVINGS! ⚡️ EVs offer predictable, LOW running costs. Your wallet will thank you year after year! Plus, enjoy a smoother, quieter ride! 🌟"
+      # "2": "📈 YOUR MONEY GROWS WITH GREEN! 🌳 Think EVs are expensive? Think again! Lower fuel costs + minimal maintenance = MORE cash in your pocket over time. It's the financially savvy AND eco-friendly choice! 🌍💸"
+      "3": "🚀 FUTURE-PROOF YOUR RIDE & YOUR BANK ACCOUNT! GO GREEN NOW! 💰 Yes, upfront costs exist, but UNLOCK MASSIVE long-term savings on fuel (electricity is practically FREE!) and kiss goodbye to costly maintenance! It's not just smart, it's a PLANET-SAVING POWER MOVE! 🌍"
+      "4": "🌊 GREEN TSUNAMI OF SAVINGS! Government UNLEASHES UNPRECEDENTED support for EV drivers! 💸 HUGE subsidies, SLASHED taxes, and an EXPLODING charging network! ⚡ DON'T MISS OUT – the time to switch and SAVE BIG is NOW! 🔥"
+      "5": "💥 IGNITE THE GREEN REVOLUTION! DRIVE THE FUTURE, TODAY! 🚗💨 Ditch unpredictable gas prices for STABLE, DIRT-CHEAP electric power! Experience a JAW-DROPPING ride, FUTURISTIC tech, and UNBEATABLE long-term value! THE REVOLUTION IS HERE – ARE YOU IN?! 🌟"
+      "6": "⏳ DON'T GET LEFT BEHIND! The Smart Money is on GREEN! 🌿💰 EVs are not just a trend, they're the future of cost-effective transport. Lower running costs, higher resale value potential, and a healthier planet. Invest in your future AND your finances! 💡"
+      "7": "🎉 FINAL CALL for SAVVY SAVERS! 🌿🚗 Embrace the Green Wave and watch your expenses SHRINK! 📉 Electric vehicles deliver UNBEATABLE long-term economic benefits. Cheaper fuel, less upkeep, and a cleaner conscience. Make the switch – your future self (and wallet) will thank you! 🥳"
+      # Add more messages
+
+# --- Simulation and Evaluation Configuration ---
+simulation_name_prefix: "carbon_policy_exp"
+num_epochs: 8 # Adjust as needed, e.g., 12 for a year if monthly
+start_date: "2024-01-01"
+epoch_duration_days: 30
+save_decision_prompts: True
+
+# --- Logging Configuration ---
+log_level: "INFO" # DEBUG for more details, INFO for production runs 
