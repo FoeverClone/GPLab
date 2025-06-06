@@ -10,8 +10,8 @@ llm_api_configs:
     description: "Local New-API deepseek-ai/DeepSeek-R1-Distill-Qwen-7B"
     weight: 1.0                                                                   # Load balancing weight
   - base_url: "https://api.siliconflow.cn/v1/"                                    # Example: SiliconFlow endpoint (adjust if needed)
-    api_key: "sk-..."                                                             # Replace with your actual API key
-    model: "BAAI/bge-m3"                                                          # Embedding model name
+    api_key: "sk-iuebkrpyqrcxdkyngdbmxmpngjpmldiznyityzvdomzcceim"                                                             # Replace with your actual API key
+    model: "THUDM/glm-4-9b-chat"                                                          # Embedding model name
     description: "SiliconFlow Embedding API (bge-m3)"
     weight: 1.0                                                                   # Load balancing weight
   - base_url: "https://open.bigmodel.cn/api/paas/v4/"                             # Example: ZhipuAI endpoint
@@ -23,12 +23,12 @@ llm_api_configs:
     weight: 1.0                                                                   # Load balancing weight
   # Add more API configurations as needed
 
-agent_driver_llm_index: [0]      # Array of indices for agent decisions (supports load balancing)
-other_llm_index: [0, 2]          # Array of indices for other tasks (e.g., emotion eval, sentiment analysis)
+agent_driver_llm_index: [1]      # Array of indices for agent decisions (supports load balancing)
+other_llm_index: [1]          # Array of indices for other tasks (e.g., emotion eval, sentiment analysis)
 embedding_api_index: 1           # Index (0-based) in llm_api_configs to use for remote embeddings (if use_local_embedding is False)
 
 # QPS Control Configuration
-max_concurrent_requests: 5                 # Maximum concurrent LLM requests to prevent rate limiting
+max_concurrent_requests: 3                 # Maximum concurrent LLM requests to prevent rate limiting
 
 use_local_embedding_model: True # Whether to use a local embedding model (True) or a remote API (False)
 # local_embedding_model_path: "sentence-transformers/all-MiniLM-L6-v2" # Path or HF identifier for local model
@@ -37,8 +37,8 @@ embedding_dimension: 384        # Dimension of the chosen embedding model
 embedding_device: "cpu"        # Device for local embeddings ('cuda', 'cpu', etc.)
 
 # --- Social Agent Configuration ---
-agent_data_path: "../data/all_profiles.json" # Path to the JSON file containing agent source data
-agent_sample_size: 500          # Number of agents to sample for the simulation
+agent_data_path: "../data/cgsc2018_profiles.json" # Path to the JSON file containing agent source data
+agent_sample_size: 500         # Number of agents to sample for the simulation
 agent_sample_seed: 42            # Random seed for agent sampling reproducibility
 agent_sampling_method: "random"  # Method for sampling agents ("random")
 
@@ -55,6 +55,7 @@ agent_decision_principles:
   - "React to policies and social events based on your personal experiences and values. Express yourself in a way that matches your everyday habits and make decisions that show your individuality."
 
 # --- Social Subsystem Configuration ---
+subsystem_directory_group: "exp1"
 active_subsystems:               # List of subsystem class names to activate
   - "EcoSystemExp1"
   - "OpinionSystemExp1"
@@ -86,9 +87,10 @@ subsystem_configs:
       - name: "work_willingness"
         description: "<a number between 0.0 and 1.0 indicating your willingness to work>"
     economic_policies: # Epoch-keyed policies
-      "4": "To promote consumption and stimulate the economy, the government has decided to issue consumption vouchers worth 10000 yuan per person, which can be used for various types of consumption"
-      "5": "The consumption voucher policy continues to be implemented, with the second batch of vouchers issued at 1000 yuan per person, encouraging consumers to increase spending"
-      "6": "The consumption voucher policy enters its final month, with regions continuing to issue vouchers and urging the public to use them quickly"
+      "0": ""
+      # "4": "To promote consumption and stimulate the economy, the government has decided to issue consumption vouchers worth 10000 yuan per person, which can be used for various types of consumption"
+      # "5": "The consumption voucher policy continues to be implemented, with the second batch of vouchers issued at 1000 yuan per person, encouraging consumers to increase spending"
+      # "6": "The consumption voucher policy enters its final month, with regions continuing to issue vouchers and urging the public to use them quickly"
 
   OpinionSystemExp1:
     recommendation_algorithm: "random" # "random" or "similar"
@@ -135,6 +137,3 @@ save_decision_prompts: True      # Whether to save agent decision prompts to the
 
 # --- Logging Configuration ---
 log_level: "INFO"                # Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-
-
-

@@ -18,6 +18,21 @@ from src.subsystems.base import SocialSystemBase
 from src.agents.agent import SocialAgent
 from src.agents.memory import MemorySystem
 
+
+class SimpleBlackboard:
+    """Simple blackboard implementation for data sharing between subsystems"""
+    def __init__(self):
+        self.data = {}
+        
+    def post_data(self, key: str, value: Any, source_system: str = None):
+        """Post data to blackboard"""
+        self.data[key] = value
+        
+    def get_data(self, key: str, default: Any = None) -> Any:
+        """Get data from blackboard"""
+        return self.data.get(key, default)
+
+
 class SimulatorScheduler:
     def __init__(self, config_path: str = "../config/config.yaml"):
         self.config = load_config(config_path)
@@ -46,6 +61,10 @@ class SimulatorScheduler:
         
         self.db = SimulationDB(os.path.join(self.results_dir, "results.db"))
         self.db.save_config(self.config)
+
+        # Initialize blackboard for data sharing
+        self.blackboard = SimpleBlackboard()
+        self.logger.info("Blackboard initialized for inter-subsystem communication")
 
         self.agents: List[SocialAgent] = []
         self.subsystems: Dict[str, SocialSystemBase] = {}
@@ -96,16 +115,32 @@ class SimulatorScheduler:
         self.logger.info("Initializing active social subsystems...")
         active_system_class_names = self.config.get("active_subsystems", [])
         subsystem_configs = self.config.get("subsystem_configs", {})
+        subsystem_directory_group = self.config.get("subsystem_directory_group")
+
+        if not subsystem_directory_group:
+            self.logger.error("Configuration key 'subsystem_directory_group' is missing or empty. "
+                              "Cannot determine subsystem module path. No subsystems will be loaded.")
+            return
+
+        # Construct the path to the specific experiment's subsystem directory
+        base_subsystems_path = os.path.join(os.path.dirname(__file__), "..", "subsystems")
+        specific_subsystems_dir = os.path.join(base_subsystems_path, subsystem_directory_group)
+
+        if not os.path.isdir(specific_subsystems_dir):
+            self.logger.error(f"Subsystem directory '{specific_subsystems_dir}' not found. "
+                              "Please check 'subsystem_directory_group' in config and directory structure. "
+                              "No subsystems will be loaded.")
+            return
         
-        subsystems_dir = os.path.join(os.path.dirname(__file__), "..", "subsystems")
-        self.logger.debug(f"Scanning for subsystem modules in: {os.path.abspath(subsystems_dir)}")
+        self.logger.debug(f"Scanning for subsystem modules in: {os.path.abspath(specific_subsystems_dir)}")
 
         for class_name in active_system_class_names:
             found_module = False
-            for filename in os.listdir(subsystems_dir):
+            for filename in os.listdir(specific_subsystems_dir): # Iterate over specific directory
                 if filename.endswith(".py") and filename != "__init__.py" and filename != "base.py":
                     module_name_stem = filename[:-3]
-                    module_full_path = f"src.subsystems.{module_name_stem}"
+                    # Update module path to include the experiment group
+                    module_full_path = f"src.subsystems.{subsystem_directory_group}.{module_name_stem}"
                     try:
                         # Dynamically import the individual subsystem module
                         subsystem_module = importlib.import_module(module_full_path)
@@ -117,7 +152,7 @@ class SimulatorScheduler:
                             found_module = True
                             config_for_subsystem = subsystem_configs.get(class_name, {})
                             
-                            instance_kwargs = {"name": class_name, "config": config_for_subsystem}
+                            instance_kwargs = {"name": class_name, "config": config_for_subsystem, "blackboard": self.blackboard}
                             if class_name == "OpinionSystemExp1": # Specific injections still needed if class has unique deps
                                 instance_kwargs["embedding_client"] = self.embedding_client
                                 # Use load balancer for LLM client selection
@@ -133,14 +168,14 @@ class SimulatorScheduler:
                             
                             instance = SubsystemClass(**instance_kwargs)
                             self.subsystems[class_name] = instance
-                            self.logger.info(f"Successfully initialized subsystem: {class_name} from {module_full_path}")
+                            self.logger.info(f"Successfully initialized subsystem: {class_name} from {module_full_path} with blackboard")
                             break # Found and loaded the class, move to next in active_system_class_names
                     except ImportError as e:
                         self.logger.error(f"Failed to import module {module_full_path}: {e}", exc_info=True)
                     except Exception as e:
                         self.logger.error(f"Error processing module {module_full_path} for class {class_name}: {e}", exc_info=True)
             if not found_module:
-                 self.logger.error(f"Subsystem class '{class_name}' listed in config was not found in any module in src/subsystems/")
+                 self.logger.error(f"Subsystem class '{class_name}' listed in config was not found in any module in {specific_subsystems_dir}/")
 
         if not self.subsystems:
             self.logger.warning("No subsystems were initialized. Simulation might not be meaningful.")
@@ -207,13 +242,10 @@ class SimulatorScheduler:
         
         # Initialize subsystems with agent data
         for name, system in self.subsystems.items():
-            try:
-                system.init(sampled_agent_data)
-                 # If subsystem needs async init (like OpinionSystem embedding posts)
-                if hasattr(system, 'init_async_resources'):
-                     await system.init_async_resources()
-            except Exception as e:
-                 self.logger.error(f"Error initializing subsystem {name} with agent data: {e}", exc_info=True)
+            system.init(sampled_agent_data)
+                # If subsystem needs async init (like OpinionSystem embedding posts)
+            if hasattr(system, 'init_async_resources'):
+                    await system.init_async_resources()
 
     async def _run_agent_step_with_qps_control(self, agent, sim_time, subsystems, perception, decision_principles):
         """Run agent step with QPS control to prevent API rate limiting."""

@@ -6,6 +6,9 @@
 /src/visualization/
 /.specstory/
 /sci_visualization_results/
+/sage_latex_template_4/
+/docs/
+/policy_evalute_example.md/
 
 # General ignores
 __pycache__/

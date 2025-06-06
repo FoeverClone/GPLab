@@ -4,15 +4,15 @@ import pandas as pd # Use pandas for easier aggregation
 import datetime
 from abc import ABC, abstractmethod
 
-from .base import SocialSystemBase
+from src.subsystems.base import SocialSystemBase
 from src.utils.logger import get_logger
 from src.utils.data_loader import get_nested_value
 from src.simulation.time import SimulationTime
 
 
 class EcoSystemExp1(SocialSystemBase):
-    def __init__(self, name: str, config: Dict[str, Any]):
-        super().__init__(name, config)
+    def __init__(self, name: str, config: Dict[str, Any], blackboard: Any = None):
+        super().__init__(name, config, blackboard)
         self.logger = get_logger(name)
         self.base_consumption_rate = config.get("base_consumption_rate", 0.6)
         self.base_work_willingness = config.get("base_work_willingness", 0.7)

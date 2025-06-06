@@ -1,0 +1,143 @@
+# GPLab Configuration File - Digital Government Policy Experiment
+
+# --- Large Language Model (LLM) and Embedding Model Configuration ---
+llm_api_configs:
+  - base_url: "http://localhost:3000/v1/"
+    api_key: "sk-V395yxePMIyg6eCiNtL2mdlD1LAqA3KKAgj783ElOditm151"
+    model: "THUDM/glm-4-9b-chat"
+    temperature: 0.7
+    top_p: 0.9
+    description: "Local GLM-4 for digital government simulation"
+    weight: 1.0
+
+agent_driver_llm_index: [0]
+other_llm_index: [0]
+embedding_api_index: [0]
+
+# QPS Control Configuration
+max_concurrent_requests: 10
+
+use_local_embedding_model: True
+local_embedding_model_path: "C://Users//Cromwell//.cache//huggingface//hub//models--sentence-transformers--all-MiniLM-L6-v2//snapshots//e4ce9877abf3edfe10b0d82785e83bdcb973e22e"
+embedding_dimension: 384
+embedding_device: "cpu"
+
+# --- Social Agent Configuration ---
+agent_data_path: "../data/llm_mock_profiles.json"
+agent_sample_size: 100
+agent_sample_seed: 357
+agent_sampling_method: "random"
+
+# Agent Memory System Configuration
+memory_reflection_threshold: 5
+memory_reflection_count: 2
+memory_time_weight_lambda: 0.8
+memory_retrieval_k: 5
+
+# Agent Decision Principles
+agent_decision_principles:
+  - "Consider your digital literacy, convenience needs, and trust in technology when using government services."
+  - "Evaluate the trade-offs between traditional in-person services and digital alternatives."
+  - "Provide feedback based on your experience to help improve digital government services."
+
+# --- Social Subsystem Configuration ---
+subsystem_directory_group: "digital_government"
+active_subsystems:
+  - "EGovernmentSystem"
+  - "CitizenAdoptionSystem"
+
+# Configuration specific to each subsystem
+subsystem_configs:
+  EGovernmentSystem:
+    required_agent_attributes: [
+      "id",
+      "basic_info.age",
+      "basic_info.education_level",
+      "social_attributes.communication_approach"
+    ]
+    environment_attributes: ["available_services", "platform_features", "support_resources", "service_quality"]
+    decision_attributes:
+      - name: "service_channel_choice"
+        description: "<choose from: 'online_only', 'offline_only', 'mixed_preference', 'avoid_government_services'>"
+      - name: "digital_adoption_level"
+        description: "<a value between 0.0 and 1.0 indicating your willingness to use digital government services>"
+      - name: "feedback_type"
+        description: "<choose from: 'positive', 'negative', 'constructive', 'none'>"
+    
+    # Digital government rollout by epoch
+    digital_policies:
+      "0": {
+        "services_online": ["basic_info_query"],
+        "platform_quality": 0.5,
+        "user_support": "limited",
+        "mobile_app": False
+      }
+      "1": {
+        "services_online": ["basic_info_query", "document_download"],
+        "platform_quality": 0.6,
+        "user_support": "limited",
+        "mobile_app": False
+      }
+      "2": {  # Major digitalization push
+        "services_online": ["basic_info_query", "document_download", "permit_application", "tax_filing"],
+        "platform_quality": 0.7,
+        "user_support": "enhanced",
+        "mobile_app": True,
+        "ai_assistant": True
+      }
+      "3": {
+        "services_online": ["basic_info_query", "document_download", "permit_application", "tax_filing", "social_benefits"],
+        "platform_quality": 0.8,
+        "user_support": "comprehensive",
+        "mobile_app": True,
+        "ai_assistant": True
+      }
+      "4": {  # Full digital transformation
+        "services_online": ["all_services"],
+        "platform_quality": 0.9,
+        "user_support": "24/7",
+        "mobile_app": True,
+        "ai_assistant": True,
+        "biometric_authentication": True,
+        "offline_service_reduction": 0.5
+      }
+      "5": {
+        "services_online": ["all_services"],
+        "platform_quality": 0.95,
+        "user_support": "24/7",
+        "mobile_app": True,
+        "ai_assistant": True,
+        "biometric_authentication": True,
+        "offline_service_reduction": 0.7
+      }
+
+  CitizenAdoptionSystem:
+    required_agent_attributes: ["id", "basic_info.age"]
+    environment_attributes: ["adoption_rates", "user_satisfaction", "digital_divide"]
+    decision_attributes: []
+    
+    # Technology adoption model parameters
+    innovation_diffusion_rate: 0.15
+    age_adoption_factors: {
+      "18-30": 0.9,
+      "31-45": 0.7,
+      "46-60": 0.5,
+      "61+": 0.3
+    }
+    
+    # Digital divide factors
+    education_adoption_boost: {
+      "high_school": 0.1,
+      "college": 0.2,
+      "graduate": 0.3
+    }
+
+# --- Simulation and Evaluation Configuration ---
+simulation_name_prefix: "digital_government"
+num_epochs: 6
+start_date: "2024-01-01"
+epoch_duration_days: 30
+save_decision_prompts: True
+
+# --- Logging Configuration ---
+log_level: "INFO" 

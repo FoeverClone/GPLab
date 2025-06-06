@@ -1,0 +1,167 @@
+# GPLab Configuration File - COVID Vaccine Policy Experiment
+
+# --- Large Language Model (LLM) and Embedding Model Configuration ---
+llm_api_configs:
+  - base_url: "http://localhost:3000/v1/"
+    api_key: "sk-V395yxePMIyg6eCiNtL2mdlD1LAqA3KKAgj783ElOditm151"
+    model: "THUDM/glm-4-9b-chat"
+    temperature: 0.7
+    top_p: 0.9
+    description: "Local model for vaccine policy simulation"
+    weight: 1.0
+
+agent_driver_llm_index: [0]
+other_llm_index: [0]
+embedding_api_index: [0]
+
+# QPS Control Configuration
+max_concurrent_requests: 10
+
+use_local_embedding_model: True
+local_embedding_model_path: "C://Users//Cromwell//.cache//huggingface//hub//models--sentence-transformers--all-MiniLM-L6-v2//snapshots//e4ce9877abf3edfe10b0d82785e83bdcb973e22e"
+embedding_dimension: 384
+embedding_device: "cpu"
+
+# --- Social Agent Configuration ---
+agent_data_path: "../data/llm_mock_profiles.json"
+agent_sample_size: 100
+agent_sample_seed: 456
+agent_sampling_method: "random"
+
+# Agent Memory System Configuration
+memory_reflection_threshold: 5
+memory_reflection_count: 2
+memory_time_weight_lambda: 0.8
+memory_retrieval_k: 5
+
+# Agent Decision Principles
+agent_decision_principles:
+  - "Consider your health condition, risk factors, and trust in vaccines when deciding about vaccination."
+  - "Balance between personal safety concerns and community health benefits."
+  - "Take into account official recommendations and the experiences of people you know."
+  - "Consider both the potential benefits and any concerns you may have about the vaccine."
+  - "Your age and health conditions significantly affect your risk level and vaccination urgency."
+
+# --- Social Subsystem Configuration ---
+subsystem_directory_group: "vaccine_policy"
+active_subsystems:
+  - "VaccineOpinionSystem"
+  - "VaccineHealthSystem"
+
+# Configuration specific to each subsystem
+subsystem_configs:
+  VaccineOpinionSystem:
+    required_agent_attributes: [
+      "id",
+      "basic_info.age",
+      "basic_info.education_level",
+      "psychological_attributes.decision_style"
+    ]
+    environment_attributes: ["vaccine_campaigns", "public_sentiment", "media_coverage"]
+    decision_attributes:
+      - name: "vaccination_willingness"
+        description: "<rate from 0.0 to 1.0 - your willingness to get vaccinated>"
+      - name: "express_vaccine_opinion"
+        description: "<choose 'yes' or 'no' - whether to express opinion about vaccines>"
+      - name: "opinion_content"
+        description: "<if express_vaccine_opinion is 'yes', provide your opinion text>"
+      - name: "trust_in_vaccine"
+        description: "<choose from: 'high', 'moderate', 'low' - your trust level in vaccine safety>"
+      - name: "preferred_timing"
+        description: "<choose from: 'immediate', 'wait_1_week', 'wait_2_weeks', 'wait_longer' - when you prefer to get vaccinated>"
+    
+    # Vaccine campaigns by epoch
+    vaccine_campaigns:
+      "0": "Initial Phase: COVID vaccines are being developed. Stay informed about the progress."
+      "1": "Vaccine Approved: Safe and effective vaccines are now available for high-risk groups."
+      "2": "Mass Campaign: 'Protect Yourself, Protect Others' - Free vaccines available for all adults."
+      "3": "Community Focus: Local vaccination centers open. Healthcare workers recommend vaccination."
+      "4": "Booster Campaign: Studies show boosters significantly improve protection. Get your booster shot."
+      "5": "Final Push: Achieving community immunity requires 80% vaccination rate. Do your part!"
+    
+    # Media coverage sentiment by epoch
+    media_coverage:
+      "0": { "positive": 0.6, "neutral": 0.3, "negative": 0.1 }
+      "1": { "positive": 0.7, "neutral": 0.2, "negative": 0.1 }
+      "2": { "positive": 0.65, "neutral": 0.2, "negative": 0.15 }
+      "3": { "positive": 0.7, "neutral": 0.15, "negative": 0.15 }
+      "4": { "positive": 0.75, "neutral": 0.15, "negative": 0.1 }
+      "5": { "positive": 0.8, "neutral": 0.15, "negative": 0.05 }
+    
+    # Opinion influence parameters
+    opinion_influence:
+      trust_to_willingness_factor: 0.3  # How trust level affects willingness
+      neighbor_influence_weight: 0.2    # How much neighbors' opinions matter
+
+  VaccineHealthSystem:
+    required_agent_attributes: [
+      "id",
+      "basic_info.age",
+      "health_attributes.chronic_conditions"
+    ]
+    environment_attributes: ["infection_status", "vaccination_status", "neighbor_health_status", "vaccine_availability"]
+    decision_attributes:
+      - name: "get_vaccinated"
+        description: "<choose 'yes' or 'no' - whether to get vaccinated this epoch>"
+      - name: "vaccination_timing"
+        description: "<if get_vaccinated is 'yes', choose from: 'immediate', 'wait_1_week', 'wait_2_weeks'>"
+      - name: "encourage_others"
+        description: "<choose 'yes' or 'no' - whether to encourage friends/family to get vaccinated>"
+    
+    # Health and vaccine parameters
+    vaccine_params:
+      initial_infection_rate: 0.05  # 5% initially infected (reduced from 10%)
+      vaccine_effectiveness: 0.85   # 85% protection when fully effective
+      vaccine_effectiveness_delay: 14  # Days until vaccine reaches full effectiveness
+      vaccine_partial_effectiveness: 0.3  # Effectiveness during delay period
+      vaccine_side_effect_rate: 0.001  # 0.1% mild side effects
+      vaccine_availability_by_epoch:
+        "0": 0.0   # Not available
+        "1": 0.3   # Limited availability
+        "2": 0.8   # Widely available
+        "3": 1.0   # Full availability
+        "4": 1.0
+        "5": 1.0
+      
+    # Infection parameters
+    infection_params:
+      base_transmission_rate: 0.06  # Base chance of transmission (reduced from 0.08)
+      vaccinated_transmission_reduction: 0.7  # 70% reduction if vaccinated
+      recovered_immunity_duration: 90  # Days of immunity after recovery
+      age_severity_factors:
+        "0-18": 0.3
+        "19-40": 0.5
+        "41-60": 1.0
+        "61+": 2.0
+      chronic_condition_severity_multiplier: 1.5
+      recovery_days: [7, 21]
+      age_recovery_modifiers:  # Multiplier for recovery time by age
+        "0-18": 0.8
+        "19-40": 1.0
+        "41-60": 1.2
+        "61+": 1.5
+      
+    # Social network parameters
+    social_network:
+      avg_connections: 10  # Reduced from 12 to slow transmission
+      connection_types: ["family", "work", "friend", "neighbor"]
+      influence_weights:  # How much each connection type influences vaccination decision
+        "family": 0.4
+        "work": 0.2
+        "friend": 0.2
+        "neighbor": 0.2
+      transmission_probability_by_type:  # Different transmission rates by connection type
+        "family": 0.15
+        "work": 0.08
+        "friend": 0.06
+        "neighbor": 0.04
+
+# --- Simulation and Evaluation Configuration ---
+simulation_name_prefix: "vaccine_policy"
+num_epochs: 6
+start_date: "2021-01-01"
+epoch_duration_days: 30  # 1 month per epoch
+save_decision_prompts: True
+
+# --- Logging Configuration ---
+log_level: "INFO" 

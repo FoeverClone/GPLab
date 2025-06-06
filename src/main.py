@@ -2,7 +2,7 @@
 Author: FoeverTree 11965818+cromwell_mao@user.noreply.gitee.com
 Date: 2025-05-13 11:34:34
 LastEditors: FoeverTree 11965818+cromwell_mao@user.noreply.gitee.com
-LastEditTime: 2025-05-31 11:49:45
+LastEditTime: 2025-06-05 23:57:59
 FilePath: \GPLab\src\main.py
 Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
 '''
@@ -10,6 +10,7 @@ Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查�
 import asyncio
 import sys
 import os
+import argparse
 
 # Ensure the src directory is in the Python path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -18,7 +19,17 @@ sys.path.append(os.path.dirname(current_dir))
 from simulation.scheduler import SimulatorScheduler
 
 def main():
-    scheduler = SimulatorScheduler(config_path='../config/config.yaml')
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Run GPLab pandemic simulation')
+    parser.add_argument('--config', 
+                       default='../config/config_exp1.yaml',
+                       help='Path to the configuration file')
+    args = parser.parse_args()
+    
+    # Use the config path from command line or default
+    config_path = args.config
+    
+    scheduler = SimulatorScheduler(config_path=config_path)
     try:
         asyncio.run(scheduler.run_simulation())
         # After simulation, evaluate performance (optional)
@@ -39,3 +50,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

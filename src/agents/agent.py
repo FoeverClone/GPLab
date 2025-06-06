@@ -18,12 +18,14 @@ class SocialAgent:
                  agent_data: Dict[str, Any],
                  decision_llm_client: OpenaiModel,
                  emotion_llm_client: OpenaiModel, 
-                 memory_system: MemorySystem):
+                 memory_system: MemorySystem,
+                 max_retries: int = 3):
         self.static_attributes = agent_data
         self.agent_id = str(get_nested_value(agent_data, "id", "unknown_agent"))
         self.decision_llm_client = decision_llm_client
         self.emotion_llm_client = emotion_llm_client
         self.memory_system = memory_system
+        self.max_retries = max_retries
         
         self.current_emotion: str = "Neutral"
         self.last_decision: Optional[Dict[str, Any]] = None
@@ -42,12 +44,18 @@ class SocialAgent:
              history_for_emotion += f"\nLast Action Reasoning: {self.last_decision['reasoning']}"
 
         if history_for_emotion:
-            try:
-                self.current_emotion = await self.emotion_llm_client.evaluate_emotion(history_for_emotion)
-                logger.debug(f"Agent {self.agent_id} updated emotion to: {self.current_emotion}")
-            except Exception as e:
-                logger.error(f"Agent {self.agent_id}: Failed to update emotion: {e}")
-                self.current_emotion = "Neutral" # Fallback
+            retry_count = 0
+            while retry_count < self.max_retries:
+                try:
+                    self.current_emotion = await self.emotion_llm_client.evaluate_emotion(history_for_emotion)
+                    logger.debug(f"Agent {self.agent_id} updated emotion to: {self.current_emotion}")
+                    break
+                except Exception as e:
+                    retry_count += 1
+                    logger.warning(f"Agent {self.agent_id}: Failed to update emotion (attempt {retry_count}/{self.max_retries}): {e}")
+                    if retry_count == self.max_retries:
+                        logger.error(f"Agent {self.agent_id}: Max retries reached for emotion update, using default.")
+                        self.current_emotion = "Neutral" # Fallback
         else:
             self.current_emotion = "Neutral"
 
@@ -89,24 +97,37 @@ class SocialAgent:
         self.last_prompt = prompt
         logger.debug(f"Agent {self.agent_id} Prompt:\n{prompt}")
 
-        # 5. Call LLM for Decision
-        raw_response = await self.decision_llm_client.async_text_query(prompt)
+        # 5. Call LLM for Decision with retries
+        retry_count = 0
+        raw_response = None
         parsed_decision = None
 
-        # 6. Parse Response
-        if raw_response:
-            parsed_decision = await parse_json_response(self.decision_llm_client, raw_response)
-            if parsed_decision:
-                self.last_decision = parsed_decision
-                logger.info(f"Agent {self.agent_id} made decision: {self.last_decision}")
-            else:
-                logger.warning(f"Agent {self.agent_id}: Failed to parse decision JSON from LLM response: {raw_response[:200]}...")
-                self.last_decision = self._generate_default_decision(active_subsystems)
-                parsed_decision = self.last_decision # Use default as the current decision
-        else:
-            logger.error(f"Agent {self.agent_id}: No response from decision LLM.")
-            self.last_decision = self._generate_default_decision(active_subsystems)
-            parsed_decision = self.last_decision # Use default as the current decision
+        while retry_count < self.max_retries:
+            try:
+                raw_response = await self.decision_llm_client.async_text_query(prompt)
+                if raw_response:
+                    parsed_decision = await parse_json_response(self.decision_llm_client, raw_response)
+                    if parsed_decision:
+                        self.last_decision = parsed_decision
+                        logger.info(f"Agent {self.agent_id} made decision: {self.last_decision}")
+                        break
+                    else:
+                        logger.warning(f"Agent {self.agent_id}: Failed to parse decision JSON (attempt {retry_count + 1}/{self.max_retries})")
+                else:
+                    logger.warning(f"Agent {self.agent_id}: No response from decision LLM (attempt {retry_count + 1}/{self.max_retries})")
+                
+                retry_count += 1
+                if retry_count == self.max_retries:
+                    logger.error(f"Agent {self.agent_id}: Max retries reached, using default decision")
+                    self.last_decision = self._generate_default_decision(active_subsystems)
+                    parsed_decision = self.last_decision
+            except Exception as e:
+                retry_count += 1
+                logger.warning(f"Agent {self.agent_id}: Error during decision making (attempt {retry_count}/{self.max_retries}): {e}")
+                if retry_count == self.max_retries:
+                    logger.error(f"Agent {self.agent_id}: Max retries reached after errors, using default decision")
+                    self.last_decision = self._generate_default_decision(active_subsystems)
+                    parsed_decision = self.last_decision
 
         # 7. Store current perception summary AND decision summary in memory system AFTER decision is made
         # if perception_summary: # Store the summarized perception that informed the decision context
@@ -182,5 +203,4 @@ class SocialAgent:
             "decision_output": self.last_decision, # Last generated decision
             "decision_input": self.last_prompt # The prompt that led to the last decision
         }
-
 

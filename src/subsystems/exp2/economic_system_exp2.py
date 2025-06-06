@@ -7,8 +7,8 @@ from src.simulation.time import SimulationTime
 from src.utils.logger import get_logger
 
 class EcoSystemExp2(SocialSystemBase):
-    def __init__(self, name: str, config: Dict[str, Any]):
-        super().__init__(name, config)
+    def __init__(self, name: str, config: Dict[str, Any], blackboard: Any = None):
+        super().__init__(name, config, blackboard)
         self.logger = get_logger(self.name)
         
         # --- Attributes specific to EcoSystemExp2 ---

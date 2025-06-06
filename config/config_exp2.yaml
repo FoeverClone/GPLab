@@ -60,7 +60,7 @@ embedding_device: "cpu"         # Device for local embeddings ('cuda', 'cpu', et
 
 # --- Social Agent Configuration ---
 # Based on CGSS2018 data
-agent_data_path: "../data/all_profiles.json" # Path to the JSON file containing agent source data (NEEDS TO BE CREATED/SPECIFIED)
+agent_data_path: "../data/cgsc2018_profiles.json" # Path to the JSON file containing agent source data (NEEDS TO BE CREATED/SPECIFIED)
 agent_sample_size: 500       # Number of agents to sample for the simulation (adjust as needed)
 agent_sample_seed: 2         # Random seed for agent sampling reproducibility
 agent_sampling_method: "random" # Method for sampling agents ("random")
@@ -75,6 +75,7 @@ memory_retrieval_k: 5
 agent_decision_principles:
   - "According to social identity theory, individuals adjust their views to align with group norms in response to the need for belonging."
 # --- Social Subsystem Configuration ---
+subsystem_directory_group: "exp2"
 active_subsystems:
   - "EcoSystemExp2"
   - "OpinionSystemExp2"

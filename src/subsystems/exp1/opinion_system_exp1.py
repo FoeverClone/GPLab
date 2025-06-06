@@ -4,17 +4,17 @@ import uuid
 from datetime import datetime,timedelta  # Use this import for the datetime class
 import pandas as pd
 import math
-from .base import SocialSystemBase
+from src.subsystems.base import SocialSystemBase
 from src.utils.logger import get_logger
 from src.utils.data_loader import get_nested_value
 from src.utils.embedding_clients import EmbeddingClient, cosine_similarity
 from src.utils.llm_clients import OpenaiModel, LLMConfig # For sentiment analysis
 
 class OpinionSystemExp1(SocialSystemBase):
-    def __init__(self, name: str, config: Dict[str, Any], 
+    def __init__(self, name: str, config: Dict[str, Any],blackboard: Any = None,
                  embedding_client: Optional[EmbeddingClient] = None, 
                  llm_client_for_sentiment: Optional[OpenaiModel] = None):
-        super().__init__(name, config)
+        super().__init__(name, config, blackboard)
         self.logger = get_logger(name)
         self.recommendation_algorithm = config.get("recommendation_algorithm", "similar")
         self.num_recommendations = config.get("num_recommendations", 5)
