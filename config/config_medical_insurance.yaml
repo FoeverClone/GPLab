@@ -2,20 +2,41 @@
 
 # --- Large Language Model (LLM) and Embedding Model Configuration ---
 llm_api_configs:
-  - base_url: "http://localhost:3000/v1/"
-    api_key: "sk-V395yxePMIyg6eCiNtL2mdlD1LAqA3KKAgj783ElOditm151"
-    model: "THUDM/glm-4-9b-chat"
+  - base_url: "https://c-1933184793287917569.ksai.scnet.cn:58043/v1/"
+    api_key: "xx"
+    model: "Meta-Llama-3.1-8B-Instruct"
     temperature: 0.7
     top_p: 0.9
-    description: "Local GLM-4 for medical insurance simulation"
+    description: "Local GLM-4 for tax incentive policy simulation"
+    weight: 1.0
+  - base_url: "https://c-1933330052495351809.ksai.scnet.cn:58043/v1/"
+    api_key: "xx"
+    model: "Meta-Llama-3.1-8B-Instruct"
+    temperature: 0.7
+    top_p: 0.9
+    description: "Local GLM-4 for tax incentive policy simulation"
+    weight: 1.0
+  - base_url: "https://c-1933330069663318017.ksai.scnet.cn:58043/v1/"
+    api_key: "xx"
+    model: "Meta-Llama-3.1-8B-Instruct"
+    temperature: 0.7
+    top_p: 0.9
+    description: "Local Meta-Llama-3.1-8B for tax incentive policy simulation"
+    weight: 1.0
+  - base_url: "https://c-1932628807280033794.ksai.scnet.cn:58043/v1/"
+    api_key: "xx"
+    model: "Qwen3-8B"
+    temperature: 0.7
+    top_p: 0.9
+    description: "Local Qwen3-8B for tax incentive policy simulation"
     weight: 1.0
 
-agent_driver_llm_index: [0]
-other_llm_index: [0]
-embedding_api_index: [0]
+agent_driver_llm_index: [0,1,2]
+other_llm_index: [0,1,2]
+embedding_api_index: [1]
 
 # QPS Control Configuration
-max_concurrent_requests: 10
+max_concurrent_requests: 400
 
 use_local_embedding_model: True
 local_embedding_model_path: "C://Users//Cromwell//.cache//huggingface//hub//models--sentence-transformers--all-MiniLM-L6-v2//snapshots//e4ce9877abf3edfe10b0d82785e83bdcb973e22e"
@@ -24,7 +45,7 @@ embedding_device: "cpu"
 
 # --- Social Agent Configuration ---
 agent_data_path: "../data/llm_mock_profiles.json"
-agent_sample_size: 100
+agent_sample_size: 5000
 agent_sample_seed: 123
 agent_sampling_method: "random"
 

@@ -19,6 +19,11 @@ class LLMConfig(BaseModel):
 class OpenaiModel:
     def __init__(self, config: LLMConfig):
         self.config = config
+        # Initialize token counters
+        self.prompt_tokens = 0
+        self.completion_tokens = 0
+        self.total_tokens = 0
+        
         if not self.config.api_key or not self.config.base_url:
             logger.warning(f"API key or base URL missing for model {self.config.model}. Client not initialized.")
             self.aclient = None
@@ -62,6 +67,14 @@ class OpenaiModel:
             logger.debug(f"Sending query to {self.config.model}. Params: {query_params}")
             response = await self.aclient.chat.completions.create(**query_params)
             result = response.choices[0].message.content
+            
+            # Update token counters
+            if hasattr(response, 'usage'):
+                self.prompt_tokens += response.usage.prompt_tokens
+                self.completion_tokens += response.usage.completion_tokens
+                self.total_tokens += response.usage.total_tokens
+                logger.debug(f"Updated token count: +{response.usage.total_tokens} tokens")
+            
             logger.debug(f"Received response from {self.config.model}: {result[:100]}...")
             return result
         except Exception as e:
@@ -82,6 +95,20 @@ class OpenaiModel:
         # Simple split, assuming LLM returns reflections separated by newlines
         reflections = [r.strip() for r in reflection_text.split('\n') if r.strip() and not r.strip().startswith("Here are") and not r.strip().startswith("1.") and not r.strip().startswith("2.")]
         return reflections[:2] # Return max 2
+    
+    def get_token_stats(self) -> Dict[str, int]:
+        """Return current token usage statistics"""
+        return {
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+            "total_tokens": self.total_tokens
+        }
+    
+    def reset_token_counters(self):
+        """Reset all token counters to zero"""
+        self.prompt_tokens = 0
+        self.completion_tokens = 0
+        self.total_tokens = 0
 
 async def parse_json_response(llm_client: OpenaiModel, raw_response: str, max_retries: int = 2) -> Optional[Dict]:
     current_try = 0

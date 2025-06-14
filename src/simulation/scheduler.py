@@ -141,39 +141,34 @@ class SimulatorScheduler:
                     module_name_stem = filename[:-3]
                     # Update module path to include the experiment group
                     module_full_path = f"src.subsystems.{subsystem_directory_group}.{module_name_stem}"
-                    try:
-                        # Dynamically import the individual subsystem module
-                        subsystem_module = importlib.import_module(module_full_path)
-                        if hasattr(subsystem_module, class_name):
-                            SubsystemClass: Type[SocialSystemBase] = getattr(subsystem_module, class_name)
-                            if not issubclass(SubsystemClass, SocialSystemBase):
-                                self.logger.warning(f"Class {class_name} in {module_full_path} is not a subclass of SocialSystemBase. Skipping.")
-                                continue
-                            found_module = True
-                            config_for_subsystem = subsystem_configs.get(class_name, {})
-                            
-                            instance_kwargs = {"name": class_name, "config": config_for_subsystem, "blackboard": self.blackboard}
-                            if class_name == "OpinionSystemExp1": # Specific injections still needed if class has unique deps
-                                instance_kwargs["embedding_client"] = self.embedding_client
-                                # Use load balancer for LLM client selection
-                                if self.llm_load_balancer:
-                                    sentiment_client = self.llm_load_balancer.get_other_llm_client("sentiment_analysis")
-                                    instance_kwargs["llm_client_for_sentiment"] = sentiment_client
-                                else:
-                                    self.logger.warning(f"Load balancer not available for {class_name}, using fallback LLM client")
-                                    other_llm_idx = self.config.get("other_llm_index", 0)
-                                    if isinstance(other_llm_idx, list) and other_llm_idx:
-                                        other_llm_idx = other_llm_idx[0]  # Use first index as fallback
-                                    instance_kwargs["llm_client_for_sentiment"] = self.llm_clients.get(other_llm_idx)
-                            
-                            instance = SubsystemClass(**instance_kwargs)
-                            self.subsystems[class_name] = instance
-                            self.logger.info(f"Successfully initialized subsystem: {class_name} from {module_full_path} with blackboard")
-                            break # Found and loaded the class, move to next in active_system_class_names
-                    except ImportError as e:
-                        self.logger.error(f"Failed to import module {module_full_path}: {e}", exc_info=True)
-                    except Exception as e:
-                        self.logger.error(f"Error processing module {module_full_path} for class {class_name}: {e}", exc_info=True)
+                    # Dynamically import the individual subsystem module
+                    subsystem_module = importlib.import_module(module_full_path)
+                    if hasattr(subsystem_module, class_name):
+                        SubsystemClass: Type[SocialSystemBase] = getattr(subsystem_module, class_name)
+                        if not issubclass(SubsystemClass, SocialSystemBase):
+                            self.logger.warning(f"Class {class_name} in {module_full_path} is not a subclass of SocialSystemBase. Skipping.")
+                            continue
+                        found_module = True
+                        config_for_subsystem = subsystem_configs.get(class_name, {})
+                        
+                        instance_kwargs = {"name": class_name, "config": config_for_subsystem, "blackboard": self.blackboard}
+                        if class_name == "OpinionSystemExp1": # Specific injections still needed if class has unique deps
+                            instance_kwargs["embedding_client"] = self.embedding_client
+                            # Use load balancer for LLM client selection
+                            if self.llm_load_balancer:
+                                sentiment_client = self.llm_load_balancer.get_other_llm_client("sentiment_analysis")
+                                instance_kwargs["llm_client_for_sentiment"] = sentiment_client
+                            else:
+                                self.logger.warning(f"Load balancer not available for {class_name}, using fallback LLM client")
+                                other_llm_idx = self.config.get("other_llm_index", 0)
+                                if isinstance(other_llm_idx, list) and other_llm_idx:
+                                    other_llm_idx = other_llm_idx[0]  # Use first index as fallback
+                                instance_kwargs["llm_client_for_sentiment"] = self.llm_clients.get(other_llm_idx)
+                        
+                        instance = SubsystemClass(**instance_kwargs)
+                        self.subsystems[class_name] = instance
+                        self.logger.info(f"Successfully initialized subsystem: {class_name} from {module_full_path} with blackboard")
+                        break # Found and loaded the class, move to next in active_system_class_names
             if not found_module:
                  self.logger.error(f"Subsystem class '{class_name}' listed in config was not found in any module in {specific_subsystems_dir}/")
 
@@ -387,6 +382,9 @@ class SimulatorScheduler:
         total_duration = end_sim_time - start_sim_time
         self.logger.info(f"Simulation finished after {self.num_epochs} epochs.")
         self.logger.info(f"Total simulation time: {total_duration:.2f} seconds.")
+        
+        # Collect and report token usage statistics
+        self._report_token_usage()
 
         # Final Evaluation
         self.logger.info("Performing final evaluations...")
@@ -430,3 +428,47 @@ class SimulatorScheduler:
         # e.g., average epoch time, agent step time distribution, LLM call times
         self.logger.info("Evaluating simulation performance (Placeholder - Not Implemented)")
         # Visualization of performance metrics could be added here
+        
+    def _report_token_usage(self):
+        """Collect and report token usage statistics from all LLM clients"""
+        self.logger.info("Token Usage Report:")
+        
+        total_prompt_tokens = 0
+        total_completion_tokens = 0
+        total_tokens = 0
+        
+        # Collect statistics from all LLM clients
+        for idx, client in self.llm_clients.items():
+            if isinstance(client, OpenaiModel):
+                stats = client.get_token_stats()
+                model_name = client.config.description or client.config.model
+                prompt_tokens = stats["prompt_tokens"]
+                completion_tokens = stats["completion_tokens"]
+                total_model_tokens = stats["total_tokens"]
+                
+                total_prompt_tokens += prompt_tokens
+                total_completion_tokens += completion_tokens
+                total_tokens += total_model_tokens
+                
+                self.logger.info(f"  - Model {model_name}: {prompt_tokens:,} prompt + {completion_tokens:,} completion = {total_model_tokens:,} total tokens")
+        
+        # Log grand totals
+        self.logger.info(f"Total Token Usage: {total_prompt_tokens:,} prompt + {total_completion_tokens:,} completion = {total_tokens:,} total tokens")
+        
+        # Save token statistics to database
+        try:
+            token_metrics = {
+                "prompt_tokens": total_prompt_tokens,
+                "completion_tokens": total_completion_tokens,
+                "total_tokens": total_tokens,
+                "models": {f"model_{idx}": client.get_token_stats() for idx, client in self.llm_clients.items() if isinstance(client, OpenaiModel)}
+            }
+            
+            self.db.save_subsystem_result(
+                simulation_id=self.simulation_id,
+                subsystem_name="token_usage",
+                metrics=token_metrics
+            )
+            self.logger.info("Token usage statistics saved to database")
+        except Exception as e:
+            self.logger.error(f"Failed to save token usage statistics: {e}")

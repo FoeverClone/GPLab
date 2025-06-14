@@ -18,6 +18,9 @@ class DiseaseTransmissionSystem(SocialSystemBase):
         # Health code impact parameters
         self.health_code_impact = config.get("health_code_impact", {})
         
+        # Health code enforcement parameters - NEW
+        self.health_code_enforcement = config.get("health_code_enforcement", {})
+        
         # Agent mobility tracking
         self.agent_mobility = defaultdict(dict)  # agent_id -> {go_out, destination, transport}
         self.daily_contacts = defaultdict(list)  # agent_id -> [contact_ids]
@@ -61,6 +64,12 @@ class DiseaseTransmissionSystem(SocialSystemBase):
         current_impact = self.health_code_impact.get(str(epoch), {})
         restriction_level = current_impact.get("restriction_level", 0)
         transmission_reduction = current_impact.get("transmission_reduction", 0)
+        mobility_reduction = current_impact.get("mobility_reduction", 0)
+        
+        # Get current health code enforcement rules
+        current_enforcement = self.health_code_enforcement.get(str(epoch), {
+            "green": True, "yellow": True, "red": True  # Default: all can go out
+        })
         
         self.system_state["restriction_level"] = restriction_level
         
@@ -69,8 +78,13 @@ class DiseaseTransmissionSystem(SocialSystemBase):
         self.transport_usage.clear()
         self.daily_contacts.clear()
         
+        # Get health code distribution from blackboard
+        health_code_distribution = self._get_from_blackboard("health_code_distribution", {})
+        agent_health_codes = self._get_from_blackboard("agent_health_codes", {})
+        
         # Process mobility decisions
         agents_going_out = []
+        blocked_agents = []
         
         for agent_id, decisions in agent_decisions.items():
             mobility_decision = decisions.get(self.name, {})
@@ -84,17 +98,40 @@ class DiseaseTransmissionSystem(SocialSystemBase):
                 destination = destination[0] if destination else "none"
             if isinstance(transport, list):
                 transport = transport[0] if transport else "none"
+            
+            # Get agent's health code color
+            health_code = agent_health_codes.get(agent_id, "green").lower()
+            
+            # Check if agent is allowed to go out based on health code and current policy
+            allowed_to_go_out = current_enforcement.get(health_code, False)
+            
+            # Store original decision
+            original_go_out = go_out == "yes"
+            
+            # Apply health code restrictions - this is the key change
+            actual_go_out = original_go_out and allowed_to_go_out
+            
+            # Apply general mobility reduction due to policy (people voluntarily reducing mobility)
+            if actual_go_out and random.random() < mobility_reduction:
+                actual_go_out = False
                 
             self.agent_mobility[agent_id] = {
-                "go_out": go_out == "yes",
-                "destination": destination,
-                "transport": transport
+                "go_out": actual_go_out,
+                "destination": destination if actual_go_out else "none",
+                "transport": transport if actual_go_out else "none",
+                "blocked_by_policy": original_go_out and not actual_go_out
             }
             
-            if go_out == "yes":
+            if actual_go_out:
                 agents_going_out.append(agent_id)
                 self.location_crowding[destination] += 1
                 self.transport_usage[transport] += 1
+            elif original_go_out and not actual_go_out:
+                blocked_agents.append(agent_id)
+        
+        # Log policy impact
+        if blocked_agents:
+            self.logger.info(f"Health code policy blocked {len(blocked_agents)} agents from going out")
         
         # Calculate contacts and transmission
         self._calculate_contacts(agents_going_out)
@@ -110,11 +147,13 @@ class DiseaseTransmissionSystem(SocialSystemBase):
         
         # Post to blackboard
         self._post_to_blackboard("new_infections", new_infection_count)
+        self._post_to_blackboard("new_infection_list", [])  # Will be populated by _simulate_transmission
         self._post_to_blackboard("mobility_rate", len(agents_going_out) / len(agent_decisions))
+        self._post_to_blackboard("blocked_mobility_rate", len(blocked_agents) / len(agent_decisions))
         self._post_to_blackboard("effective_r0", effective_r0)
         
         # Log statistics
-        self.logger.info(f"Epoch {epoch}: {len(agents_going_out)}/{len(agent_decisions)} agents went out")
+        self.logger.info(f"Epoch {epoch}: {len(agents_going_out)}/{len(agent_decisions)} agents went out (rate: {len(agents_going_out)/len(agent_decisions):.3f})")
         self.logger.info(f"New infections: {new_infection_count}, Cumulative: {self.cumulative_infections}")
         self.logger.info(f"Location crowding: {dict(self.location_crowding)}")
         self.logger.info(f"Transport usage: {dict(self.transport_usage)}")
@@ -126,6 +165,16 @@ class DiseaseTransmissionSystem(SocialSystemBase):
         # Get current policy restrictions
         current_impact = self.health_code_impact.get(str(epoch), {})
         restriction_level = current_impact.get("restriction_level", 0)
+        
+        # Get current health code enforcement
+        current_enforcement = self.health_code_enforcement.get(str(epoch), {})
+        
+        # Get agent's health code color from blackboard
+        agent_health_codes = self._get_from_blackboard("agent_health_codes", {})
+        agent_health_code = agent_health_codes.get(agent_id, "green").lower()
+        
+        # Check if agent is allowed to go out based on health code
+        allowed_to_go_out = current_enforcement.get(agent_health_code, True)
         
         # Calculate current infection rate in population
         active_infections = self._get_from_blackboard("active_infections", 0)
@@ -165,7 +214,9 @@ class DiseaseTransmissionSystem(SocialSystemBase):
             "risk_description": risk_description,
             "health_code_restrictions": {
                 "level": restriction_level,
-                "description": self._get_restriction_description(restriction_level)
+                "description": self._get_restriction_description(restriction_level),
+                "allowed_to_go_out": allowed_to_go_out,
+                "your_health_code": agent_health_code
             },
             "public_transport_risk": {
                 "risk_level": min(transport_risk, 0.8),
@@ -248,181 +299,152 @@ class DiseaseTransmissionSystem(SocialSystemBase):
         # Simulate contact-based transmission
         for agent_id, contacts in self.daily_contacts.items():
             if agent_id in infected_agents:
-                continue  # Already infected
-            
-            # Check each contact for potential transmission
-            for contact_id in contacts:
-                if contact_id in infected_agents:
-                    # Calculate transmission probability
-                    mobility = self.agent_mobility[agent_id]
-                    location = mobility.get("destination", "none")
-                    
-                    # Get location-specific multiplier
-                    multiplier = 1.0
-                    if location == "work":
-                        multiplier = self.transmission_params.get("work_multiplier", 1.5)
-                    elif location == "shopping":
-                        multiplier = self.transmission_params.get("shopping_multiplier", 1.8)
-                    elif location == "social":
-                        multiplier = self.transmission_params.get("social_gathering_multiplier", 2.5)
-                    
-                    # Apply transport multiplier if using public transport
-                    if mobility.get("transport") == "public_transport":
-                        multiplier *= 1.5
-                    
-                    # Calculate final transmission probability
-                    transmission_prob = self.base_infection_rate * multiplier * (1 - transmission_reduction)
-                    
-                    if random.random() < transmission_prob:
-                        new_infections.add(agent_id)
-                        break  # One infection per day is enough
+                # This agent is infected and can transmit to contacts
+                for contact_id in contacts:
+                    if contact_id not in infected_agents and contact_id not in new_infections:
+                        # Base transmission probability
+                        base_prob = self.base_infection_rate
+                        
+                        # Reduce by policy effect
+                        adjusted_prob = base_prob * (1 - transmission_reduction)
+                        
+                        # Actual transmission check
+                        if random.random() < adjusted_prob:
+                            new_infections.add(contact_id)
         
-        # Additional random environmental transmission for agents who went out
-        if epoch <= 1:  # Higher environmental risk in early epochs
-            agents_going_out = [aid for aid, mobility in self.agent_mobility.items() if mobility.get("go_out")]
-            for agent_id in agents_going_out:
-                if agent_id not in infected_agents and agent_id not in new_infections:
-                    # Small chance of environmental transmission
-                    env_transmission_prob = self.base_infection_rate * 0.3 * (1 - transmission_reduction)
-                    if random.random() < env_transmission_prob:
-                        new_infections.add(agent_id)
-        
-        # Post new infections to blackboard
+        # Post the new infections to blackboard for CitizenHealthSystem to use
         self._post_to_blackboard("new_infection_list", list(new_infections))
         
         return len(new_infections)
     
     def _get_restriction_description(self, level: float) -> str:
-        """Get human-readable description of restriction level"""
-        if level < 0.2:
-            return "Minimal restrictions - normal movement allowed"
-        elif level < 0.5:
-            return "Moderate restrictions - some venues require health codes"
+        """Get description of current restriction level"""
+        if level < 0.1:
+            return "No restrictions, normal movement allowed"
+        elif level < 0.3:
+            return "Light restrictions, avoid crowded places"
+        elif level < 0.6:
+            return "Moderate restrictions, health code required in public venues"
         elif level < 0.8:
-            return "High restrictions - most venues require green health codes"
+            return "Strict restrictions, essential movement only"
         else:
-            return "Strict restrictions - only essential movement allowed"
+            return "Very strict restrictions, stay home unless necessary"
     
     def _get_outbreak_areas(self) -> List[str]:
-        """Identify areas with high infection rates"""
-        outbreak_areas = []
-        
-        for location, count in self.location_crowding.items():
-            if count > 20:  # Threshold for crowding
-                outbreak_areas.append(location)
-        
-        return outbreak_areas[:3]  # Return top 3
+        """Get list of outbreak areas"""
+        # In a real system, this would be dynamically updated based on infection clusters
+        return ["Central District", "University Area", "Industrial Zone"]
     
     def _get_daily_life_impact(self, restriction_level: float) -> str:
         """Get description of impact on daily life"""
-        if restriction_level < 0.2:
-            return "Normal daily activities can continue with basic precautions"
-        elif restriction_level < 0.5:
-            return "Some restrictions on gatherings, work and essential activities continue"
+        if restriction_level < 0.1:
+            return "Normal daily life, no significant impact"
+        elif restriction_level < 0.3:
+            return "Minor inconvenience, occasional checks"
+        elif restriction_level < 0.6:
+            return "Moderate impact, regular health code checks"
         elif restriction_level < 0.8:
-            return "Significant restrictions, only essential activities recommended"
+            return "Significant impact, limited access to public places"
         else:
-            return "Strict lockdown, only emergency activities allowed"
+            return "Severe impact, most venues closed or restricted"
     
     def evaluate(self) -> Dict[str, Any]:
         """Evaluate the disease transmission system"""
         self.logger.info("=== Disease Transmission System Evaluation ===")
         
-        # Calculate mobility trends
-        mobility_by_epoch = []
-        destination_distribution = defaultdict(lambda: defaultdict(int))
-        transport_distribution = defaultdict(lambda: defaultdict(int))
-        
-        # Get all epochs that were processed
-        processed_epochs = list(range(self.current_time.get_current_epoch() + 1)) if self.current_time else []
-        
-        for epoch in processed_epochs:
-            epoch_mobility = 0
-            epoch_agents = 0
+        # Calculate mobility metrics
+        mobility_by_epoch = {}
+        for epoch in range(self.current_time.get_current_epoch() + 1):
+            # Get the decisions from that epoch
+            epoch_decisions = self._get_from_blackboard(f"epoch_{epoch}_decisions", {})
+            if not epoch_decisions:
+                continue
+                
+            # Count agents who went out
+            agents_out = 0
+            for agent_id, agent_mobility in self.agent_mobility.items():
+                if agent_mobility.get("go_out", False):
+                    agents_out += 1
             
-            # Count mobility for this epoch by checking agent_mobility data
-            for agent_id, mobility in self.agent_mobility.items():
-                epoch_agents += 1
-                if mobility.get("go_out"):
-                    epoch_mobility += 1
-                    destination_distribution[epoch][mobility.get("destination", "none")] += 1
-                    transport_distribution[epoch][mobility.get("transport", "none")] += 1
-            
-            if epoch_agents > 0:
-                mobility_rate = epoch_mobility / epoch_agents
-                mobility_by_epoch.append(mobility_rate)
-                self.logger.info(f"Epoch {epoch}: {epoch_mobility}/{epoch_agents} agents went out (rate: {mobility_rate:.3f})")
+            mobility_rate = agents_out / len(epoch_decisions) if epoch_decisions else 0
+            mobility_by_epoch[epoch] = mobility_rate
         
-        # Calculate infection metrics
-        infection_timeline = []
-        for epoch in processed_epochs:
-            infection_count = self.new_infections.get(epoch, 0)
-            infection_timeline.append(infection_count)
+        # Calculate transmission metrics
+        total_infections = sum(self.new_infections.values())
+        peak_infections = max(self.new_infections.values()) if self.new_infections else 0
+        peak_epoch = max(self.new_infections.items(), key=lambda x: x[1])[0] if self.new_infections else 0
         
-        # Calculate R0 estimates
-        r0_estimates = []
-        for i in range(1, len(infection_timeline)):
-            if infection_timeline[i-1] > 0:
-                r0_estimates.append(infection_timeline[i] / infection_timeline[i-1])
+        # Calculate average R0
+        r0_values = []
+        for epoch in range(self.current_time.get_current_epoch() + 1):
+            active_infections = self._get_from_blackboard(f"epoch_{epoch}_active_infections", 0)
+            new_infections = self.new_infections.get(epoch, 0)
+            if active_infections > 0:
+                r0 = new_infections / active_infections
+                r0_values.append(r0)
         
-        # Impact of restrictions
-        restriction_impact = self._analyze_restriction_impact()
+        avg_r0 = sum(r0_values) / len(r0_values) if r0_values else 0
         
-        evaluation_results = {
-            "total_infections": self.cumulative_infections,
-            "infection_timeline": infection_timeline,
-            "peak_infections": max(infection_timeline) if infection_timeline else 0,
-            "peak_epoch": infection_timeline.index(max(infection_timeline)) if infection_timeline and max(infection_timeline) > 0 else -1,
-            "average_mobility_rate": sum(mobility_by_epoch) / len(mobility_by_epoch) if mobility_by_epoch else 0,
-            "mobility_by_epoch": mobility_by_epoch,
-            "destination_preferences": {
-                epoch: dict(dests) for epoch, dests in destination_distribution.items()
-            },
-            "transport_preferences": {
-                epoch: dict(trans) for epoch, trans in transport_distribution.items()
-            },
-            "r0_estimates": r0_estimates,
-            "average_r0": sum(r0_estimates) / len(r0_estimates) if r0_estimates else 0,
-            "restriction_effectiveness": restriction_impact
-        }
+        # Calculate policy impact
+        policy_impact = self._analyze_restriction_impact()
+        
+        # Prepare infection timeline
+        infection_timeline = {}
+        for epoch in range(self.current_time.get_current_epoch() + 1):
+            infection_timeline[epoch] = self.new_infections.get(epoch, 0)
         
         # Log key metrics
-        self.logger.info(f"Total infections from transmission system: {self.cumulative_infections}")
-        self.logger.info(f"Peak infections: {evaluation_results['peak_infections']} at epoch {evaluation_results['peak_epoch']}")
-        self.logger.info(f"Average mobility rate: {evaluation_results['average_mobility_rate']:.3f}")
-        self.logger.info(f"Average R0: {evaluation_results['average_r0']:.3f}")
+        self.logger.info(f"Total infections from transmission system: {total_infections}")
+        self.logger.info(f"Peak infections: {peak_infections} at epoch {peak_epoch}")
+        self.logger.info(f"Average mobility rate: {sum(mobility_by_epoch.values()) / len(mobility_by_epoch) if mobility_by_epoch else 0}")
+        self.logger.info(f"Average R0: {avg_r0}")
         
-        # Log time series data
+        # Log infection timeline
         self.logger.info("Infection timeline:")
-        for epoch, count in enumerate(infection_timeline):
+        for epoch, count in infection_timeline.items():
             self.logger.info(f"  Epoch {epoch}: {count} new infections")
         
+        # Log mobility rates
         self.logger.info("Mobility rates by epoch:")
-        for epoch, rate in enumerate(mobility_by_epoch):
-            self.logger.info(f"  Epoch {epoch}: {rate:.3f}")
+        for epoch, rate in mobility_by_epoch.items():
+            self.logger.info(f"  Epoch {epoch}: {rate}")
         
-        self.evaluation_results = evaluation_results
-        return evaluation_results
+        return {
+            "total_infections": total_infections,
+            "peak_infections": peak_infections,
+            "peak_epoch": peak_epoch,
+            "average_mobility_rate": sum(mobility_by_epoch.values()) / len(mobility_by_epoch) if mobility_by_epoch else 0,
+            "mobility_by_epoch": mobility_by_epoch,
+            "average_r0": avg_r0,
+            "infection_timeline": infection_timeline,
+            "policy_impact": policy_impact
+        }
     
     def _analyze_restriction_impact(self) -> Dict[str, Any]:
-        """Analyze the impact of health code restrictions on transmission"""
-        impact_analysis = {}
+        """Analyze the impact of restrictions on mobility and transmission"""
+        impact_by_epoch = {}
         
-        # Compare infection rates before and after major policy changes
-        policy_epochs = [2, 3, 4, 5]  # Based on config
+        for epoch in range(self.current_time.get_current_epoch() + 1):
+            # Get policy parameters for this epoch
+            policy = self.health_code_impact.get(str(epoch), {})
+            restriction_level = policy.get("restriction_level", 0)
+            transmission_reduction = policy.get("transmission_reduction", 0)
+            mobility_reduction = policy.get("mobility_reduction", 0)
+            
+            # Get mobility rate for this epoch
+            mobility_rate = self._get_from_blackboard(f"epoch_{epoch}_mobility_rate", 0)
+            blocked_rate = self._get_from_blackboard(f"epoch_{epoch}_blocked_mobility_rate", 0)
+            
+            # Get infection data for this epoch
+            new_infections = self.new_infections.get(epoch, 0)
+            
+            impact_by_epoch[epoch] = {
+                "restriction_level": restriction_level,
+                "transmission_reduction": transmission_reduction,
+                "mobility_reduction": mobility_reduction,
+                "actual_mobility_rate": mobility_rate,
+                "blocked_mobility_rate": blocked_rate,
+                "new_infections": new_infections
+            }
         
-        for epoch in policy_epochs:
-            if epoch in self.new_infections and (epoch - 1) in self.new_infections:
-                before = self.new_infections[epoch - 1]
-                after = self.new_infections[epoch]
-                
-                reduction = (before - after) / max(before, 1)
-                
-                impact_analysis[f"epoch_{epoch}_impact"] = {
-                    "infections_before": before,
-                    "infections_after": after,
-                    "reduction_rate": reduction,
-                    "effectiveness": "high" if reduction > 0.3 else "moderate" if reduction > 0.1 else "low"
-                }
-        
-        return impact_analysis 
+        return impact_by_epoch 

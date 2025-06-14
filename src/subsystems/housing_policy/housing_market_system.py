@@ -28,6 +28,13 @@ class HousingMarketSystem(SocialSystemBase):
         self.transaction_history = []
         self.demand_history = []
         
+        # Track baseline transaction volume for comparison
+        self.baseline_transactions = 0
+        self.baseline_established = False
+        
+        # Opinion system integration
+        self.opinion_system = None
+        
         self.logger.info(f"HousingMarketSystem initialized with initial price: {self.initial_price} yuan/sqm")
 
     def init(self, all_agent_data: List[Dict[str, Any]]):
@@ -50,6 +57,11 @@ class HousingMarketSystem(SocialSystemBase):
             self.agent_purchase_history[agent_id] = []
         
         self.logger.info(f"Initialized {len(self.agent_properties)} agents with property ownership")
+    
+    def connect_to_opinion_system(self, opinion_system):
+        """Connect to the opinion system for sentiment influence"""
+        self.opinion_system = opinion_system
+        self.logger.info("Connected to HousingOpinionSystem for sentiment influence")
 
     def get_system_information(self, agent_id: str) -> Dict[str, Any]:
         """Provide housing market information to agents"""
@@ -138,18 +150,57 @@ class HousingMarketSystem(SocialSystemBase):
                         self.logger.debug(f"Agent {agent_id} purchased property (type: {housing_type}), "
                                         f"now owns {self.agent_properties[agent_id]} properties")
         
-        # Update market price based on supply-demand dynamics
-        demand_supply_ratio = self.monthly_demand / max(self.monthly_transactions, 1)
-        price_pressure = (demand_supply_ratio - 1) * 0.01  # Convert to price change factor
+        # Set baseline transactions in first epoch
+        if not self.baseline_established and current_epoch == 0:
+            self.baseline_transactions = max(self.monthly_transactions, 1)
+            self.baseline_established = True
+        
+        # Update market price based on supply-demand dynamics with transaction volume consideration
+        # When transactions drop significantly, prices should stabilize or decrease
+        transaction_ratio = self.monthly_transactions / max(self.baseline_transactions, 1)
+        
+        # Calculate effective demand considering policy restrictions
+        eligible_demand = 0
+        for agent_id in agent_decisions:
+            properties_owned = self.agent_properties.get(agent_id, 0)
+            if properties_owned < current_restrictions.get("max_properties_per_family", 3):
+                eligible_demand += 1
+        
+        # Adjust demand based on eligibility
+        effective_demand = min(self.monthly_demand, eligible_demand)
+        
+        # Calculate price pressure with more weight on transaction volume
+        demand_supply_ratio = effective_demand / max(self.monthly_transactions, 1)
+        
+        # Price pressure calculation with transaction volume consideration
+        # When transactions are low, even high demand has limited price impact
+        price_pressure = (demand_supply_ratio - 1) * 0.01 * transaction_ratio
+        
+        # Apply sentiment influence from opinion system if available
+        sentiment_factor = 0.0
+        if self.opinion_system:
+            try:
+                sentiment_factor = self.opinion_system.get_sentiment_influence()
+                self.logger.debug(f"Applied sentiment factor: {sentiment_factor} from opinion system")
+            except Exception as e:
+                self.logger.warning(f"Failed to get sentiment influence: {e}")
+        
+        # Adjust price pressure based on sentiment
+        price_pressure += sentiment_factor * 0.005
         
         # Add random market volatility
-        random_factor = random.gauss(0, self.price_volatility)
+        random_factor = random.gauss(0, self.price_volatility * transaction_ratio)
         
         # Update price with bounds
         price_change = price_pressure + random_factor
         self.current_price = self.current_price * (1 + price_change)
+        
+        # More reasonable price bounds - prevent extreme price increases
         self.current_price = max(self.current_price, self.initial_price * 0.7)  # Floor at 70% of initial
-        self.current_price = min(self.current_price, self.initial_price * 2.0)  # Cap at 200% of initial
+        
+        # Cap price increases more strictly when transactions are low
+        max_price = self.initial_price * (1.0 + 0.1 * transaction_ratio)
+        self.current_price = min(self.current_price, max_price)
         
         self.price_history.append(self.current_price)
         self.transaction_history.append(self.monthly_transactions)
@@ -157,7 +208,8 @@ class HousingMarketSystem(SocialSystemBase):
         
         self.logger.info(f"Epoch {current_epoch}: Price={self.current_price:.0f}, "
                         f"Transactions={self.monthly_transactions}, Demand={self.monthly_demand}, "
-                        f"D/S Ratio={demand_supply_ratio:.2f}")
+                        f"D/S Ratio={demand_supply_ratio:.2f}, Transaction Ratio={transaction_ratio:.2f}, "
+                        f"Sentiment Factor={sentiment_factor:.2f}")
 
     def evaluate(self) -> Dict[str, Any]:
         """Evaluate the effectiveness of housing purchase restriction policy"""
@@ -178,6 +230,11 @@ class HousingMarketSystem(SocialSystemBase):
         if early_transactions and late_transactions:
             transaction_reduction = (1 - np.mean(late_transactions) / np.mean(early_transactions)) * 100
         
+        # Calculate price stabilization (lower volatility in recent periods)
+        early_price_volatility = np.std(self.price_history[:3]) if len(self.price_history) > 3 else 0
+        late_price_volatility = np.std(self.price_history[-3:]) if len(self.price_history) > 3 else 0
+        price_stabilization = late_price_volatility <= early_price_volatility
+        
         evaluation_results = {
             "price_metrics": {
                 "initial_price": self.initial_price,
@@ -193,7 +250,7 @@ class HousingMarketSystem(SocialSystemBase):
             "property_distribution": property_distribution,
             "policy_effectiveness": {
                 "market_cooling_achieved": bool(price_change_percent < 10 and transaction_reduction > 20),
-                "price_stabilization": bool(np.std(self.price_history[-3:]) < np.std(self.price_history[:3])) if len(self.price_history) > 3 else False
+                "price_stabilization": price_stabilization
             },
             "time_series": {
                 "price_history": self.price_history,

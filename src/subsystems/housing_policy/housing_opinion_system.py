@@ -24,6 +24,10 @@ class HousingOpinionSystem(SocialSystemBase):
         self.topic_frequency = defaultdict(int)
         self.topic_frequency_history = []
         
+        # Market sentiment influence
+        self.current_market_sentiment = "neutral"  # neutral, optimistic, pessimistic
+        self.sentiment_influence_factor = config.get("sentiment_influence_factor", 0.5)
+        
         self.logger.info("HousingOpinionSystem initialized")
 
     def init(self, all_agent_data: List[Dict[str, Any]]):
@@ -71,9 +75,9 @@ class HousingOpinionSystem(SocialSystemBase):
     def _analyze_sentiment(self, content: str) -> str:
         """Simple sentiment analysis based on keywords"""
         negative_keywords = ["expensive", "unaffordable", "crisis", "bubble", "can't afford", 
-                           "impossible", "unfair", "regulation", "restriction"]
+                           "impossible", "unfair", "regulation", "restriction", "overpriced"]
         positive_keywords = ["opportunity", "investment", "bought", "happy", "affordable", 
-                           "success", "dream", "stable"]
+                           "success", "dream", "stable", "growth", "potential"]
         
         content_lower = content.lower()
         neg_count = sum(1 for keyword in negative_keywords if keyword in content_lower)
@@ -121,17 +125,18 @@ class HousingOpinionSystem(SocialSystemBase):
             sentiment_counts[post["sentiment"]] += 1
         
         total_recent = len(recent_posts)
-        market_sentiment = "neutral"
         if total_recent > 0:
             if sentiment_counts["negative"] / total_recent > 0.5:
-                market_sentiment = "pessimistic"
+                self.current_market_sentiment = "pessimistic"
             elif sentiment_counts["positive"] / total_recent > 0.4:
-                market_sentiment = "optimistic"
+                self.current_market_sentiment = "optimistic"
+            else:
+                self.current_market_sentiment = "neutral"
         
         return {
             "trending_topics": list(self.topic_frequency.keys())[:3],
             "policy_news": policy_news,
-            "market_sentiment": market_sentiment,
+            "market_sentiment": self.current_market_sentiment,
             "recommended_posts": [
                 {
                     "id": post["id"],
@@ -149,12 +154,21 @@ class HousingOpinionSystem(SocialSystemBase):
         epoch_topic_frequency = defaultdict(int)
         
         for agent_id, decisions in agent_decisions.items():
-            if "HousingOpinionSystem" not in decisions:
+            if self.name not in decisions:
                 continue
             
-            actions = decisions["HousingOpinionSystem"].get("social_actions", [])
+            housing_decision = decisions.get(self.name, {})
+            actions = housing_decision.get("social_actions", [])
             
             for action in actions:
+                # Handle case where action might be a string instead of dict
+                if isinstance(action, str):
+                    continue
+                    
+                # Ensure action is a dictionary before calling .get()
+                if not isinstance(action, dict):
+                    continue
+                    
                 action_type = action.get("action")
                 
                 if action_type == "post":
@@ -192,7 +206,17 @@ class HousingOpinionSystem(SocialSystemBase):
         self.topic_frequency_history.append(dict(epoch_topic_frequency))
 
         self.logger.info(f"Epoch {self.current_time.get_current_epoch() if self.current_time else 0}: "
-                        f"New posts={total_posts}, Sentiment distribution={epoch_sentiment}, Topic Freq={dict(epoch_topic_frequency)}")
+                        f"New posts={total_posts}, Sentiment distribution={epoch_sentiment}, "
+                        f"Topic Freq={dict(epoch_topic_frequency)}, Market Sentiment={self.current_market_sentiment}")
+
+    def get_sentiment_influence(self) -> float:
+        """Calculate sentiment influence factor for housing market"""
+        if self.current_market_sentiment == "pessimistic":
+            return -self.sentiment_influence_factor
+        elif self.current_market_sentiment == "optimistic":
+            return self.sentiment_influence_factor
+        else:
+            return 0.0
 
     def evaluate(self) -> Dict[str, Any]:
         """Evaluate public opinion dynamics regarding housing policy"""
@@ -244,7 +268,8 @@ class HousingOpinionSystem(SocialSystemBase):
                 for post in top_posts[:5]
             ],
             "policy_impact": {
-                "sentiment_shift_after_policy": self._calculate_policy_impact() if len(self.sentiment_history) > 3 else "insufficient_data"
+                "sentiment_shift_after_policy": self._calculate_policy_impact() if len(self.sentiment_history) > 3 else "insufficient_data",
+                "sentiment_influence_on_market": self.get_sentiment_influence()
             }
         }
         
@@ -277,5 +302,6 @@ class HousingOpinionSystem(SocialSystemBase):
             "total_posts": len(self.posts),
             "current_sentiment": self.sentiment_history[-1] if self.sentiment_history else {},
             "trending_topics": list(self.topic_frequency.keys())[:3],
+            "market_sentiment": self.current_market_sentiment,
             "epoch": self.current_time.get_current_epoch() if self.current_time else 0
         } 

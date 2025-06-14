@@ -129,10 +129,6 @@ class SocialAgent:
                     self.last_decision = self._generate_default_decision(active_subsystems)
                     parsed_decision = self.last_decision
 
-        # 7. Store current perception summary AND decision summary in memory system AFTER decision is made
-        # if perception_summary: # Store the summarized perception that informed the decision context
-        #     await self.memory_system.add_memory(f"At {current_dt.strftime('%Y-%m-%d %H:%M')}, I observed: {perception_summary}", current_dt, type="observation")
-        
         if parsed_decision: # Store the action taken and its reasoning
             reasoning = parsed_decision.get("reasoning", "No explicit reasoning provided.")
             decision_summary_text = self._summarize_decision(parsed_decision)

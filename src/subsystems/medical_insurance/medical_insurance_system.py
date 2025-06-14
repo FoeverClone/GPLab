@@ -226,29 +226,29 @@ class MedicalInsuranceSystem(SocialSystemBase):
         evaluation_results = {
             "visit_distribution": {
                 "total_visits_by_tier": total_visits_by_tier,
-                "community_clinic_ratio_change": late_community_ratio - early_community_ratio,
-                "policy_goal_achieved": late_community_ratio > early_community_ratio + 0.1
+                "community_clinic_ratio_change": float(late_community_ratio - early_community_ratio),
+                "policy_goal_achieved": bool(late_community_ratio > early_community_ratio + 0.1)
             },
             "financial_impact": {
-                "total_medical_expenses": total_expenses,
-                "total_reimbursements": total_reimbursements,
-                "average_reimbursement_rate": avg_reimbursement_rate,
-                "government_burden_change": (self.reimbursement_history[-1] - self.reimbursement_history[0]) if self.reimbursement_history else 0
+                "total_medical_expenses": float(total_expenses),
+                "total_reimbursements": float(total_reimbursements),
+                "average_reimbursement_rate": float(avg_reimbursement_rate),
+                "government_burden_change": float(self.reimbursement_history[-1] - self.reimbursement_history[0]) if self.reimbursement_history else 0
             },
             "individual_impact": {
-                "average_out_of_pocket": np.mean(individual_burdens) if individual_burdens else 0,
-                "median_out_of_pocket": np.median(individual_burdens) if individual_burdens else 0,
-                "max_out_of_pocket": max(individual_burdens) if individual_burdens else 0
+                "average_out_of_pocket": float(np.mean(individual_burdens)) if individual_burdens else 0,
+                "median_out_of_pocket": float(np.median(individual_burdens)) if individual_burdens else 0,
+                "max_out_of_pocket": float(max(individual_burdens)) if individual_burdens else 0
             },
             "time_series": {
                 "visit_history": self.visit_history,
-                "expense_history": self.expense_history,
-                "reimbursement_history": self.reimbursement_history
+                "expense_history": [float(x) for x in self.expense_history],
+                "reimbursement_history": [float(x) for x in self.reimbursement_history]
             },
             "policy_effectiveness": {
-                "increased_community_clinic_usage": late_community_ratio > early_community_ratio,
-                "reduced_individual_burden": np.mean(individual_burdens) < 1000 if individual_burdens else False,
-                "cost_control_achieved": total_expenses < len(self.agent_medical_expenses) * 2000
+                "increased_community_clinic_usage": bool(late_community_ratio > early_community_ratio),
+                "reduced_individual_burden": bool(float(np.mean(individual_burdens)) < 1000) if individual_burdens else False,
+                "cost_control_achieved": bool(total_expenses < len(self.agent_medical_expenses) * 2000)
             }
         }
         

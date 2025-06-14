@@ -2,20 +2,41 @@
 
 # --- Large Language Model (LLM) and Embedding Model Configuration ---
 llm_api_configs:
-  - base_url: "http://localhost:3000/v1/"
-    api_key: "sk-V395yxePMIyg6eCiNtL2mdlD1LAqA3KKAgj783ElOditm151"
-    model: "THUDM/glm-4-9b-chat"
+  - base_url: "https://c-1933184793287917569.ksai.scnet.cn:58043/v1/"
+    api_key: "xx"
+    model: "Meta-Llama-3.1-8B-Instruct"
     temperature: 0.7
     top_p: 0.9
-    description: "Local GLM-4 for housing policy simulation"
+    description: "Local GLM-4 for tax incentive policy simulation"
+    weight: 1.0
+  - base_url: "https://c-1933330052495351809.ksai.scnet.cn:58043/v1/"
+    api_key: "xx"
+    model: "Meta-Llama-3.1-8B-Instruct"
+    temperature: 0.7
+    top_p: 0.9
+    description: "Local GLM-4 for tax incentive policy simulation"
+    weight: 1.0
+  - base_url: "https://c-1933330069663318017.ksai.scnet.cn:58043/v1/"
+    api_key: "xx"
+    model: "Meta-Llama-3.1-8B-Instruct"
+    temperature: 0.7
+    top_p: 0.9
+    description: "Local Meta-Llama-3.1-8B for tax incentive policy simulation"
+    weight: 1.0
+  - base_url: "https://c-1932628807280033794.ksai.scnet.cn:58043/v1/"
+    api_key: "xx"
+    model: "Qwen3-8B"
+    temperature: 0.7
+    top_p: 0.9
+    description: "Local Qwen3-8B for tax incentive policy simulation"
     weight: 1.0
 
-agent_driver_llm_index: [0]
-other_llm_index: [0]
-embedding_api_index: [0]
+agent_driver_llm_index: [0,1,2]
+other_llm_index: [0,1,2]
+embedding_api_index: [1]
 
 # QPS Control Configuration
-max_concurrent_requests: 10
+max_concurrent_requests: 50
 
 use_local_embedding_model: True
 local_embedding_model_path: "C://Users//Cromwell//.cache//huggingface//hub//models--sentence-transformers--all-MiniLM-L6-v2//snapshots//e4ce9877abf3edfe10b0d82785e83bdcb973e22e"
@@ -24,7 +45,7 @@ embedding_device: "cpu"
 
 # --- Social Agent Configuration ---
 agent_data_path: "../data/llm_mock_profiles.json"
-agent_sample_size: 100
+agent_sample_size: 200
 agent_sample_seed: 42
 agent_sampling_method: "random"
 
@@ -65,7 +86,7 @@ subsystem_configs:
     
     # Housing market parameters
     initial_avg_price_per_sqm: 15000  # Yuan per square meter
-    price_volatility: 0.02  # Monthly price volatility
+    price_volatility: 0.01  # Reduced from 0.02 to decrease price volatility
     
     # Purchase restriction policies by epoch
     purchase_restrictions:
@@ -83,9 +104,19 @@ subsystem_configs:
       - name: "social_actions"
         description: '[{"action": "post", "content": "<your post about housing market or policy>"}, {"action": "like", "post_id": "<ID>"}, {"action": "share", "post_id": "<ID>"}]'
     
+    # Sentiment influence factor (how much public opinion affects market prices)
+    sentiment_influence_factor: 0.4
+    
     policy_announcements:
       "2": "Breaking: Government announces new housing purchase restrictions to cool down overheated market"
       "4": "Update: Stricter limits - each family can now own only ONE property in urban areas"
+
+# --- System Integration Configuration ---
+system_integrations:
+  - source_system: "HousingOpinionSystem"
+    target_system: "HousingMarketSystem"
+    integration_method: "connect_to_opinion_system"
+    description: "Public opinion influences housing market prices"
 
 # --- Simulation and Evaluation Configuration ---
 simulation_name_prefix: "housing_policy"
